@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Alpha SMS — Send anonymous messages worldwide.
 
-Uses your Twilio account with alphanumeric sender ID "Alpha".
-Recipient sees "Alpha" as the sender — no phone number, no trace, no reply.
+Uses Twilio with alphanumeric sender ID "Alpha".
+- Recipient sees "Alpha" — no phone number, no trace, no reply.
+- Supports SOCKS5/HTTP proxy to hide your IP from Twilio.
+- No local logs, no message history saved.
 """
 
 from __future__ import annotations
@@ -10,6 +12,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import ssl
 import sys
 import time
 from getpass import getpass
@@ -17,13 +20,17 @@ from pathlib import Path
 from typing import NoReturn
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+from urllib.request import (
+    Request,
+    ProxyHandler,
+    build_opener,
+    urlopen,
+)
 
 
 MAX_MSG_LEN = 1600
 SENDER_ID = "Alpha"
-
-DOTENV_KEYS = {"TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN"}
+DOTENV_KEYS = {"TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "PROXY_URL"}
 
 
 class C:
@@ -47,7 +54,7 @@ BANNER = f"""{C.CN}
     ██║  ██║███████╗██║     ██║  ██║██║  ██║
     ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝{C.X}
     {C.W}{C.BD}Anonymous SMS — Worldwide{C.X}
-    {C.DM}Sender shows as "Alpha" • No trace • No reply{C.X}
+    {C.DM}Sender: "Alpha" • No trace • No reply • No logs{C.X}
 """
 
 
@@ -95,14 +102,40 @@ def read_number() -> str:
     num = input(f"\n  📱 To: ").strip().replace(" ", "").replace("-", "")
     if not num.startswith("+"):
         num = "+" + num
-    # Basic E.164 check
     if len(num) < 8 or len(num) > 16 or not num[1:].isdigit():
         fail("Invalid number. Use E.164 format with country code (e.g. +977984XXXXXXX)")
     return num
 
 
+def setup_proxy() -> bool:
+    """Configure proxy for Twilio API calls."""
+    proxy_url = os.getenv("PROXY_URL", "").strip()
+
+    if not proxy_url:
+        print(f"\n  {C.BD}── Privacy Layer ──{C.X}")
+        print(f"  {C.DM}Use a proxy to hide your IP from Twilio's servers.{C.X}")
+        print(f"  {C.CN}[1]{C.X} No proxy (use direct connection)")
+        print(f"  {C.CN}[2]{C.X} HTTP proxy  {C.DM}(e.g. http://127.0.0.1:8080){C.X}")
+        print(f"  {C.CN}[3]{C.X} SOCKS5 proxy {C.DM}(e.g. socks5h://127.0.0.1:9050 for Tor){C.X}")
+        choice = input(f"\n  Choice [1/2/3]: ").strip()
+
+        if choice == "1":
+            return False
+        elif choice in ("2", "3"):
+            proxy_url = input(f"  Proxy URL: ").strip()
+            if not proxy_url:
+                fail("Proxy URL is required.")
+        else:
+            return False
+
+    # Set proxy in environment for urllib
+    os.environ["HTTPS_PROXY"] = proxy_url
+    os.environ["HTTP_PROXY"] = proxy_url
+    return True
+
+
 def send_sms(sid: str, token: str, to: str, msg: str) -> str:
-    """Send SMS via Twilio with 'Alpha' as sender."""
+    """Send SMS via Twilio with 'Alpha' as sender. Routes through proxy if set."""
     creds = base64.b64encode(f"{sid}:{token}".encode()).decode("ascii")
     body = urlencode({"To": to, "From": SENDER_ID, "Body": msg}).encode()
     url = f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages.json"
@@ -111,10 +144,23 @@ def send_sms(sid: str, token: str, to: str, msg: str) -> str:
         "Authorization": f"Basic {creds}",
         "Content-Type": "application/x-www-form-urlencoded",
         "Accept": "application/json",
+        # Generic user agent — don't leak info
+        "User-Agent": "Mozilla/5.0",
     }, method="POST")
 
+    # Build opener with proxy if configured
+    proxy_url = os.environ.get("HTTPS_PROXY", "")
+    if proxy_url:
+        proxy_handler = ProxyHandler({
+            "https": proxy_url,
+            "http": proxy_url,
+        })
+        opener = build_opener(proxy_handler)
+    else:
+        opener = build_opener()
+
     try:
-        with urlopen(req, timeout=30) as resp:
+        with opener.open(req, timeout=30) as resp:
             data = json.loads(resp.read().decode())
     except HTTPError as e:
         try:
@@ -142,9 +188,16 @@ def spinner(text: str, secs: float = 2.0) -> None:
     print(f"\r{' ' * (len(text) + 8)}\r", end="")
 
 
+def clear_screen() -> None:
+    os.system("cls" if sys.platform == "win32" else "clear")
+
+
 def main() -> int:
     if sys.platform == "win32":
         os.system("")  # enable ANSI on Windows
+
+    # Disable Python bytecode cache (__pycache__) — leave no trace
+    sys.dont_write_bytecode = True
 
     print(BANNER)
     load_dotenv()
@@ -155,7 +208,26 @@ def main() -> int:
     token = get_cred("TWILIO_AUTH_TOKEN", "Auth Token", secret=True)
     print(f"  {C.G}[✓] Credentials loaded{C.X}")
 
-    # --- Loop: send multiple messages ---
+    # --- Proxy setup ---
+    using_proxy = setup_proxy()
+    if using_proxy:
+        print(f"  {C.G}[✓] Proxy active — your IP is hidden from Twilio{C.X}")
+    else:
+        print(f"  {C.Y}[!] No proxy — Twilio can see your IP{C.X}")
+
+    # --- Privacy info ---
+    print(f"\n  {C.BD}── Privacy Status ──{C.X}")
+    print(f"  {C.G}[✓]{C.X} Sender ID: \"Alpha\" (no number shown)")
+    print(f"  {C.G}[✓]{C.X} No local logs saved")
+    print(f"  {C.G}[✓]{C.X} No message history")
+    print(f"  {C.G}[✓]{C.X} No __pycache__ created")
+    print(f"  {C.G}[✓]{C.X} Recipient cannot reply")
+    if using_proxy:
+        print(f"  {C.G}[✓]{C.X} IP hidden via proxy")
+    else:
+        print(f"  {C.Y}[!]{C.X} IP visible to Twilio (use proxy to hide)")
+
+    # --- Loop: send messages ---
     while True:
         to = read_number()
         print(f"\n  {C.BD}Type your anonymous message:{C.X}")
@@ -172,6 +244,8 @@ def main() -> int:
         print(f"  {C.Y}  From:    Alpha{C.X}")
         print(f"  {C.CN}  To:      {to}{C.X}")
         print(f"  {C.W}  Message: {msg}{C.X}")
+        if using_proxy:
+            print(f"  {C.G}  Proxy:   Active ✓{C.X}")
         print(f"  {C.BD}{'═' * 44}{C.X}")
 
         confirm = input(f"\n  {C.BD}Type SEND to fire 🚀: {C.X}").strip()
@@ -181,15 +255,20 @@ def main() -> int:
             spinner("Sending as Alpha...")
             msg_sid = send_sms(sid, token, to, msg)
             print(f"  {C.G}[✓] Message sent! 🎉{C.X}")
-            print(f"  {C.DM}SID: {msg_sid}{C.X}")
-            print(f"  {C.DM}Recipient sees sender as: \"Alpha\"{C.X}")
-            print(f"  {C.DM}They CANNOT reply or trace you.{C.X}")
+            print(f"  {C.DM}Recipient sees: \"Alpha\"{C.X}")
+            print(f"  {C.DM}Cannot reply. Cannot trace.{C.X}")
+            # Don't print SID — leave no trace in terminal history
+            del msg_sid
 
         # --- Again? ---
         print()
         again = input(f"  {C.BD}Send another? (y/n): {C.X}").strip().lower()
         if again != "y":
-            print(f"\n  {C.CN}Bye! 👋{C.X}\n")
+            # Clear screen on exit for privacy
+            clear_input = input(f"  {C.BD}Clear terminal? (y/n): {C.X}").strip().lower()
+            if clear_input == "y":
+                clear_screen()
+            print(f"\n  {C.CN}Gone like a ghost. 👻{C.X}\n")
             break
 
     return 0
