@@ -120,12 +120,21 @@ def setup_proxy() -> bool:
         choice = input(f"\n  Choice [1/2/3]: ").strip()
 
         if choice == "1":
+            # Clear any leftover proxy settings
+            os.environ.pop("HTTPS_PROXY", None)
+            os.environ.pop("HTTP_PROXY", None)
+            os.environ.pop("https_proxy", None)
+            os.environ.pop("http_proxy", None)
             return False
         elif choice in ("2", "3"):
             proxy_url = input(f"  Proxy URL: ").strip()
             if not proxy_url:
                 fail("Proxy URL is required.")
         else:
+            os.environ.pop("HTTPS_PROXY", None)
+            os.environ.pop("HTTP_PROXY", None)
+            os.environ.pop("https_proxy", None)
+            os.environ.pop("http_proxy", None)
             return False
 
     # Set proxy in environment for urllib
