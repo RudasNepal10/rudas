@@ -62,35 +62,31 @@ locally when prompted. Do not commit credentials to this repository.
 
 ---
 
-## Anonymous SMS
+## Alpha SMS — Anonymous Worldwide
 
-Send an SMS where the recipient sees a custom name (e.g. **"Anonymous"**) instead of your phone number.
-
-### How it works
-
-Uses Twilio's **Messaging Service** with an **alphanumeric sender ID**. The recipient sees a name like "Anonymous" or "Unknown" instead of a phone number — they cannot reply or trace the sender.
-
-> **Note:** Alphanumeric sender IDs are **not supported** in the US/Canada. They work in most other countries (UK, India, Nepal, Australia, etc.).
+Send an anonymous SMS to **any country**. The recipient sees **"Alpha"** as the sender — no phone number, no trace, no reply possible.
 
 ### Setup
 
-1. Go to [Twilio Console → Messaging Services](https://console.twilio.com/us1/develop/sms/services) and create a new Messaging Service.
-2. Set up an **Alphanumeric Sender ID** (e.g. `Anonymous`) in the service.
-3. Add the Messaging Service SID to your `.env`:
-   ```dotenv
-   TWILIO_MESSAGING_SERVICE_SID=MGxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-   ```
+Add your Twilio credentials to `.env`:
+
+```dotenv
+TWILIO_ACCOUNT_SID=AC...
+TWILIO_AUTH_TOKEN=your_auth_token
+```
 
 ### Usage
 
 ```powershell
-python .\anonymous_sms.py
+python .\alpha_sms.py
 ```
 
-Or use a sender ID directly via command line:
+The script will:
+1. Ask for the recipient's number (any country, e.g. `+977984XXXXXXX`)
+2. Ask for your message
+3. Show a preview and confirm
+4. Send as **"Alpha"** — recipient can't reply or trace you
+5. Ask if you want to send another
 
-```powershell
-python .\anonymous_sms.py --sender-id "Anonymous"
-```
+> **Note:** Alphanumeric sender IDs (like "Alpha") are not supported in US/Canada. Works in most other countries worldwide.
 
-The script will ask for the recipient number and your message, then confirm before sending.
