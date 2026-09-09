@@ -59,3 +59,38 @@ when you type `SEND`. Phone numbers must use E.164 format, such as
 
 You may leave the environment variables unset and enter the credentials
 locally when prompted. Do not commit credentials to this repository.
+
+---
+
+## Anonymous SMS
+
+Send an SMS where the recipient sees a custom name (e.g. **"Anonymous"**) instead of your phone number.
+
+### How it works
+
+Uses Twilio's **Messaging Service** with an **alphanumeric sender ID**. The recipient sees a name like "Anonymous" or "Unknown" instead of a phone number — they cannot reply or trace the sender.
+
+> **Note:** Alphanumeric sender IDs are **not supported** in the US/Canada. They work in most other countries (UK, India, Nepal, Australia, etc.).
+
+### Setup
+
+1. Go to [Twilio Console → Messaging Services](https://console.twilio.com/us1/develop/sms/services) and create a new Messaging Service.
+2. Set up an **Alphanumeric Sender ID** (e.g. `Anonymous`) in the service.
+3. Add the Messaging Service SID to your `.env`:
+   ```dotenv
+   TWILIO_MESSAGING_SERVICE_SID=MGxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+   ```
+
+### Usage
+
+```powershell
+python .\anonymous_sms.py
+```
+
+Or use a sender ID directly via command line:
+
+```powershell
+python .\anonymous_sms.py --sender-id "Anonymous"
+```
+
+The script will ask for the recipient number and your message, then confirm before sending.
