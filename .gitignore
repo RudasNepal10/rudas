@@ -1,0 +1,6 @@
+# Twilio secrets
+.env
+
+# Python-generated files
+__pycache__/
+*.py[cod]
